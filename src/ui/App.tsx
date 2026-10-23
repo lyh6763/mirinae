@@ -74,8 +74,11 @@ const VOLUME_KEY = 'mirinae:volume';
 
 function readVolume(): number {
   try {
-    const v = Number(localStorage.getItem(VOLUME_KEY));
-    return Number.isFinite(v) && v > 0 ? Math.min(100, v) : 60;
+    // 저장된 적이 없을 때만 기본값을 쓴다. 0(음소거)도 사용자가 고른 값이라 그대로 되살린다.
+    const raw = localStorage.getItem(VOLUME_KEY);
+    if (raw === null || raw.trim() === '') return 60;
+    const v = Number(raw);
+    return Number.isFinite(v) && v >= 0 ? Math.min(100, v) : 60;
   } catch {
     return 60;
   }
