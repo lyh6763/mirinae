@@ -8,6 +8,7 @@ import { entryKey, logStore, planetVisit, systemVisit } from './log';
 import { LogDialog } from './LogDialog';
 import { Panel } from './panels';
 import { formatHash, parseHash } from './route';
+import { DEFAULT_VOLUME, parseVolume } from './volume';
 
 export function App() {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -74,13 +75,9 @@ const VOLUME_KEY = 'mirinae:volume';
 
 function readVolume(): number {
   try {
-    // 저장된 적이 없을 때만 기본값을 쓴다. 0(음소거)도 사용자가 고른 값이라 그대로 되살린다.
-    const raw = localStorage.getItem(VOLUME_KEY);
-    if (raw === null || raw.trim() === '') return 60;
-    const v = Number(raw);
-    return Number.isFinite(v) && v >= 0 ? Math.min(100, v) : 60;
+    return parseVolume(localStorage.getItem(VOLUME_KEY));
   } catch {
-    return 60;
+    return DEFAULT_VOLUME;
   }
 }
 
