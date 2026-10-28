@@ -127,6 +127,8 @@ const EMPTY_SCAN: ScanState = { done: 0, total: 0, planets: 0, living: 0, signal
 
 export class Engine {
   readonly canvas: HTMLCanvasElement;
+  /** 그래픽 장치를 잃었을 때(절전 복귀·드라이버 재설정 등) 부른다. 화면은 새로고침으로만 되살린다. */
+  onContextLost: (() => void) | null = null;
   private renderer: THREE.WebGLRenderer;
   private composer: EffectComposer;
   private renderPass: RenderPass;
@@ -193,6 +195,7 @@ export class Engine {
     this.canvas.tabIndex = 0;
     this.canvas.setAttribute('role', 'application');
     this.canvas.setAttribute('aria-roledescription', '우주 지도');
+    this.canvas.addEventListener('webglcontextlost', this.contextLost);
     container.appendChild(this.canvas);
 
     this.labels = new LabelLayer(container);
@@ -1224,6 +1227,14 @@ export class Engine {
     this.view.update(sdt, this.simTime, this.camera);
     this.labels.update(this.camera, this.width, this.height);
     this.composer.render(dt);
+  };
+
+  // 잃은 컨텍스트에 계속 그리지 않도록 루프를 멈추고 화면에 알린다.
+  // dispose의 forceContextLoss도 이 이벤트를 내므로, 정리 중일 때는 알리지 않는다.
+  private contextLost = () => {
+    cancelAnimationFrame(this.raf);
+    if (this.disposed) return;
+    this.onContextLost?.();
   };
 
   dispose(): void {

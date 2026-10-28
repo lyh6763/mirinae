@@ -14,6 +14,7 @@ export function App() {
   const stageRef = useRef<HTMLDivElement>(null);
   const [engine, setEngine] = useState<Engine | null>(null);
   const [failed, setFailed] = useState(false);
+  const [lost, setLost] = useState(false);
 
   useEffect(() => {
     const route = parseHash(location.hash);
@@ -25,6 +26,7 @@ export function App() {
       setFailed(true);
       return;
     }
+    created.onContextLost = () => setLost(true);
     setEngine(created);
     void created.restore(route);
     // 개발 중 콘솔에서 엔진을 만져 볼 수 있게 한다.
@@ -42,6 +44,17 @@ export function App() {
         <div className="fallback" role="alert">
           <p className="title">미리내</p>
           <p>이 브라우저에서는 WebGL을 쓸 수 없어 은하를 그리지 못했습니다. 최신 Chrome·Edge·Firefox·Safari에서 열어 주세요.</p>
+        </div>
+      )}
+      {lost && (
+        <div className="fallback fallback--lost" role="alert">
+          <p className="title">미리내</p>
+          <p>그래픽 장치와의 연결이 끊겨 은하를 더 그릴 수 없습니다. 새로고침하면 지금 보던 좌표에서 다시 시작합니다.</p>
+          <p>
+            <button type="button" className="btn btn--primary" onClick={() => location.reload()}>
+              새로고침
+            </button>
+          </p>
         </div>
       )}
       <div ref={stageRef} className="stage" />

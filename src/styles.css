@@ -557,6 +557,8 @@ body { overflow: hidden; }
 @media (min-width: 900px) { .warp-hud { left: calc((100% - 392px) / 2); } }
 
 .fallback { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; padding: 24px; z-index: 5; }
+/* 멈춘 은하 위에 덮으므로, 글자가 읽히게 바탕을 어둡게 깐다. 패널·머리말보다 위에 둔다. */
+.fallback--lost { gap: 14px; background: rgba(4, 5, 10, 0.9); z-index: 20; }
 
 .sr-only {
   position: absolute !important;
