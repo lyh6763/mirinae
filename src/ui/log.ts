@@ -30,14 +30,74 @@ const EMPTY: LogData = { entries: [], warps: 0, warpLy: 0 };
 
 export const entryKey = (galaxy: string, star: number, planet: number | null) => `${galaxy}|${star}|${planet ?? '-'}`;
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isIndex = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
+const isTime = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const isLife = (value: unknown): value is LifeLevel => value === 0 || value === 1 || value === 2 || value === 3;
+const total = (value: unknown) => {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+};
+
+/** 화면과 엔진이 읽는 필드가 다 맞는 항목만 새 객체로 만든다. 빠져도 되는 필드는 기본값으로 채운다. */
+function toEntry(value: unknown): LogEntry | null {
+  if (!isRecord(value)) return null;
+  const { galaxy, star, planet, name, detail, life, first, last, visits, starred, note } = value;
+  const valid =
+    typeof galaxy === 'string' &&
+    isIndex(star) &&
+    (planet === null || isIndex(planet)) &&
+    typeof name === 'string' &&
+    typeof detail === 'string' &&
+    isLife(life) &&
+    isTime(first) &&
+    isTime(last);
+  if (!valid) return null;
+  return {
+    // 키는 저장된 값을 믿지 않고 좌표로 다시 만든다. 어긋나면 같은 곳이 두 줄로 남는다.
+    key: entryKey(galaxy, star, planet),
+    galaxy,
+    star,
+    planet,
+    name,
+    detail,
+    life,
+    first,
+    last,
+    visits: isIndex(visits) && visits > 0 ? visits : 1,
+    starred: starred === true,
+    note: typeof note === 'string' ? note.slice(0, 500) : '',
+  };
+}
+
+/**
+ * 저장된 일지를 읽는다. 일지 대화상자는 닫혀 있어도 늘 그려지고 은하 지도도 페이지를 열 때마다 항목을 읽으므로,
+ * 형식이 어긋난 항목 하나가 앱 전체를 멈추게 하지 않도록 항목마다 확인해 걸러 낸다.
+ */
+export function parseLog(raw: string | null): LogData {
+  if (!raw) return EMPTY;
+  try {
+    const data: unknown = JSON.parse(raw);
+    if (!isRecord(data) || !Array.isArray(data.entries)) return EMPTY;
+    const seen = new Set<string>();
+    const entries: LogEntry[] = [];
+    for (const value of data.entries) {
+      const entry = toEntry(value);
+      if (!entry || seen.has(entry.key)) continue;
+      seen.add(entry.key);
+      entries.push(entry);
+    }
+    return { entries, warps: total(data.warps), warpLy: total(data.warpLy) };
+  } catch {
+    return EMPTY;
+  }
+}
+
 // 저장소는 사생활 보호 모드 등에서 막혀 있을 수 있다. 막혀도 이번 방문 동안은 메모리로 동작한다.
 function load(): LogData {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return EMPTY;
-    const data = JSON.parse(raw) as Partial<LogData>;
-    if (!Array.isArray(data.entries)) return EMPTY;
-    return { entries: data.entries, warps: Number(data.warps) || 0, warpLy: Number(data.warpLy) || 0 };
+    return parseLog(localStorage.getItem(STORAGE_KEY));
   } catch {
     return EMPTY;
   }
