@@ -795,7 +795,11 @@ export class Engine {
   /** 주소에 담긴 좌표로 곧장 간다. 애니메이션 없이. */
   async restore(target: RestoreTarget): Promise<void> {
     const { star, planet, mode } = target;
-    if (star === null || star < 0 || star >= this.galaxy.count) return;
+    // 별이 없는(또는 없는 번호의) 좌표는 은하 개요다. 주소를 따라 옮겨 올 때 이전 선택이 남지 않게 지운다.
+    if (star === null || star < 0 || star >= this.galaxy.count) {
+      this.selectStar(null, false);
+      return;
+    }
     this.selectStar(star, false);
     const pos = this.galaxyView.starPosition(star);
     this.applyPose({ ...this.galaxyView.home(), position: pos.clone().add(new THREE.Vector3(0, 110, 200)), target: pos });
