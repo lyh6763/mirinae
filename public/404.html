@@ -30,6 +30,9 @@
         color: var(--text);
         font-family: "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
         line-height: 1.6;
+        /* 한국어 낱말 중간에서 줄이 바뀌지 않게 */
+        word-break: keep-all;
+        overflow-wrap: anywhere;
       }
       main {
         max-width: 30rem;
