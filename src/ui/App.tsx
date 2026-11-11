@@ -146,6 +146,20 @@ function Hud({ engine }: { engine: Engine }) {
     if (location.hash !== hash) history.replaceState(null, '', hash);
   }, [state.galaxyName, state.selectedStar, state.selectedPlanet, state.mode]);
 
+  // 열린 탭에서 주소창의 좌표를 바꾸면(붙여 넣기, 그 뒤 뒤로 가기) 그 자리로 옮겨 간다.
+  // 위의 replaceState는 hashchange를 내지 않으므로 둘이 서로를 되부르지 않는다.
+  // 비행 중(busy)이면 jump가 무시하고, 다음 상태 변화 때 주소가 지금 화면으로 다시 맞춰진다.
+  useEffect(() => {
+    const onHashChange = () => {
+      const now = engine.getState();
+      const current = formatHash({ galaxy: now.galaxyName, star: now.selectedStar, planet: now.selectedPlanet, mode: now.mode });
+      if (location.hash === current) return;
+      void engine.jump(parseHash(location.hash));
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, [engine]);
+
   // 스크린리더 안내와 초점 이동
   useEffect(() => {
     const before = prev.current;
