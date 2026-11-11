@@ -3,6 +3,8 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  # PR에서는 테스트·타입 검사·빌드까지만 하고 배포하지 않는다.
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -10,10 +12,11 @@ permissions:
   pages: write
   id-token: write
 
-# 배포가 겹치면 진행 중인 것을 끝까지 마친다.
+# 배포(main 푸시·수동 실행)가 겹치면 진행 중인 것을 끝까지 마친다.
+# PR 검사는 PR마다 따로 묶는다. 같은 pages 그룹에 들어가면 대기 중인 배포를 밀어내 취소시킬 수 있다.
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('check-{0}', github.ref) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -31,17 +34,21 @@ jobs:
       # 테스트가 실패하면 배포하지 않는다.
       - run: npm test
 
-      # 타입 검사 → vite build. 주소의 해시(#g=…)로 위치를 담으므로 하위 경로용 404 폴백은 필요 없다.
+      # 타입 검사 → vite build. 해시 좌표라 SPA 폴백은 필요 없다(잘못된 경로는 public/404.html).
       - run: npm run build
 
-      - uses: actions/configure-pages@v6
+      - if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v6
 
       # v4부터 점(.)으로 시작하는 파일은 올리지 않는다. dist에는 그런 파일이 없다.
-      - uses: actions/upload-pages-artifact@v5
+      - if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
   deploy:
+    # main 푸시와 main에서의 수동 실행만 배포한다.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
