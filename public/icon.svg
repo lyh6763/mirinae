@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- 중심을 감아 도는 나선팔 두 개와 밝은 중심의 은하. 색은 styles.css의 bg, gold, focus 토큰과 같은 값 -->
+  <rect width="32" height="32" rx="7" fill="#04050a"/>
+  <g fill="none" stroke="#ecc879" stroke-width="2.3" stroke-linecap="round" transform="rotate(-18 16 16)">
+    <path d="M13.5 12.2 C 21 7.5, 29 13.5, 24.5 21.5"/>
+    <path d="M18.5 19.8 C 11 24.5, 3 18.5, 7.5 10.5"/>
+  </g>
+  <circle cx="16" cy="16" r="3.4" fill="#ffe2a0"/>
+</svg>
