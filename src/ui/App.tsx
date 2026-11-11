@@ -11,7 +11,7 @@ import { formatHash, parseHash } from './route';
 import { DEFAULT_VOLUME, parseVolume } from './volume';
 
 export function App() {
-  const stageRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLElement>(null);
   const [engine, setEngine] = useState<Engine | null>(null);
   const [failed, setFailed] = useState(false);
   const [lost, setLost] = useState(false);
@@ -57,7 +57,8 @@ export function App() {
           </p>
         </div>
       )}
-      <div ref={stageRef} className="stage" />
+      {/* 우주 화면(캔버스, role="application")이 이 페이지의 본문이다. 머리말(header)·패널(aside)과 나란히 본문 랜드마크로 둔다. */}
+      <main ref={stageRef} className="stage" />
     </div>
   );
 }
