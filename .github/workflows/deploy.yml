@@ -3,7 +3,7 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-  # PR에서는 테스트·타입 검사·빌드까지만 하고 배포하지 않는다.
+  # PR에서는 린트·테스트·타입 검사·빌드까지만 하고 배포하지 않는다.
   pull_request:
   workflow_dispatch:
 
@@ -30,6 +30,9 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # Oxlint·Stylelint. 경고가 하나라도 있으면 멈춘다.
+      - run: npm run lint
 
       # 테스트가 실패하면 배포하지 않는다.
       - run: npm test
