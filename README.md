@@ -80,6 +80,7 @@
 - 블랙홀: 슈바르츠실트 반지름을 1로 둔 단위에서, 광자 경로를 측지선의 뉴턴식 근사(a = −1.5·h²·x/r⁵)로 픽셀마다 최대 320걸음 적분합니다. 원반은 두께 없는 평면이고 시간 지연·편광 등은 다루지 않는 시각화용 근사입니다. 픽셀 비율을 1.25로 묶어 개발 PC에서 프레임당 약 16ms.
 - 저공비행 높이: 셰이더의 3D 심플렉스 노이즈를 JavaScript로 옮겼습니다. 처음에는 GPU와 크게 어긋났는데, 기울기 격자 49칸 가운데 7칸에서 값이 수학적으로 정확히 0이 되고 그 반올림 부호가 32비트(GPU)와 64비트(JS)에서 달라 기울기 방향이 뒤집혔기 때문이었습니다. `Math.fround`로 GPU의 32비트 곱셈·덧셈을 흉내 내 4종 행성 4,096곳에서 최대 오차 0.00006으로 맞췄고, GPU에서 읽은 기준값을 테스트로 고정했습니다.
 - 지형 높낮이는 알아보기 쉽게 실제보다 약 10배 과장했고, 비행 계기의 높이는 그 비율을 되돌려 보여 줍니다.
+- 린트: TypeScript 7(네이티브 판)을 써서 typescript-eslint를 붙일 수 없어 Oxlint를 씁니다. 규칙은 다른 포트폴리오 저장소의 ESLint 구성(기본·typescript-eslint·react-hooks·jsx-a11y recommended)에 가깝게 맞췄습니다([.oxlintrc.json](.oxlintrc.json)). CSS는 Stylelint recommended([stylelint.config.js](stylelint.config.js)). 경고 0이어야 통과합니다.
 
 ```
 src/
@@ -97,6 +98,7 @@ npm run dev
 ```
 
 ```bash
+npm run lint        # Oxlint(TS·React 훅·접근성) + Stylelint
 npm test            # Vitest: 은하·항성계 생성, 지형 높이, 탐사 일지 저장값, 음량
 npm run typecheck   # tsc --noEmit
 npm run build       # 타입 검사 → vite build
@@ -110,7 +112,7 @@ npx vite build --outDir ../../mirinae-dist
 
 ## 배포
 
-- main에 푸시하면 GitHub Actions가 `npm test` → `npm run build`를 통과한 뒤 GitHub Pages에 배포합니다. PR에서는 검사만 하고 배포하지 않습니다([.github/workflows/deploy.yml](.github/workflows/deploy.yml)).
+- main에 푸시하면 GitHub Actions가 `npm run lint` → `npm test` → `npm run build`를 통과한 뒤 GitHub Pages에 배포합니다. PR에서는 검사만 하고 배포하지 않습니다([.github/workflows/deploy.yml](.github/workflows/deploy.yml)).
 - `public/`의 파일은 빌드 결과에 그대로 복사됩니다.
   - `icon.svg`(원본)·`favicon-32.png`·`apple-touch-icon.png`(180): 은하 아이콘. PNG는 SVG를 렌더한 것이라 SVG를 고치면 다시 만듭니다. SVG 주석 안에는 `--`를 쓰지 않습니다(XML 오류로 아이콘이 깨짐).
   - `og-image.jpg`: 공유 미리보기 이미지. 기본 은하 '미리내'를 사진 모드로 1200×630에서 찍은 것입니다.
