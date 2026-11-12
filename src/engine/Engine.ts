@@ -12,12 +12,23 @@ import { makeStar, makeSystem, type LifeLevel, type StarSystem } from '../gen/sy
 import { LabelLayer } from './labels';
 import { ease, Tweens, type Ease } from './tween';
 import { GalaxyView } from './views/GalaxyView';
-import { PlanetView } from './views/PlanetView';
-import { SystemView } from './views/SystemView';
-import { WarpView } from './views/WarpView';
-import { BlackHoleView } from './views/BlackHoleView';
-import { FlightView, type FlightTelemetry } from './views/FlightView';
+import type { BlackHoleView } from './views/BlackHoleView';
+import type { FlightTelemetry, FlightView } from './views/FlightView';
+import type { PlanetView } from './views/PlanetView';
+import type { SystemView } from './views/SystemView';
 import type { CameraPose, View, ViewContext } from './views/view';
+import type { WarpView } from './views/WarpView';
+
+// 은하 밖 화면(항성계·블랙홀·행성·워프·저공비행)과 그 셰이더는 첫 화면에 필요 없어 따로 받는다.
+// 은하를 띄우고 0.9초 뒤 warmUp이 먼저 받아 두므로, 화면을 옮길 때는 보통 이미 받아져 있다.
+// 받지 못하면(오프라인, 열어 둔 사이 새 배포로 옛 파일이 사라짐 등) 브라우저가 실패한 import를 기억해
+// 같은 페이지에서는 다시 받지 않는다. 그래서 다시 시도하지 않고 onStagesError에 등록한 쪽(Hud)이 새로고침을 안내한다.
+type Stages = typeof import('./stages');
+let stagesLoading: Promise<Stages> | null = null;
+function loadStages(): Promise<Stages> {
+  stagesLoading ??= import('./stages');
+  return stagesLoading;
+}
 
 export type Mode = 'galaxy' | 'system' | 'planet';
 
@@ -129,6 +140,7 @@ export class Engine {
   readonly canvas: HTMLCanvasElement;
   /** 그래픽 장치를 잃었을 때(절전 복귀·드라이버 재설정 등) 부른다. 화면은 새로고침으로만 되살린다. */
   onContextLost: (() => void) | null = null;
+  private stagesErrorListeners = new Set<() => void>();
   private renderer: THREE.WebGLRenderer;
   private composer: EffectComposer;
   private renderPass: RenderPass;
@@ -276,11 +288,36 @@ export class Engine {
     return done;
   }
 
+  /** 은하 밖 화면 코드를 받지 못해 화면을 옮기지 못했을 때 부를 함수를 등록한다. 해제 함수를 돌려준다. */
+  onStagesError(listener: () => void): () => void {
+    this.stagesErrorListeners.add(listener);
+    return () => {
+      this.stagesErrorListeners.delete(listener);
+    };
+  }
+
+  /** 은하 밖 화면 코드를 받는다. 받지 못하면 알리고 null을 돌려준다(부른 쪽은 상태를 바꾸지 않고 멈춘다). */
+  private async stages(): Promise<Stages | null> {
+    try {
+      return await loadStages();
+    } catch {
+      this.stagesErrorListeners.forEach((listener) => listener());
+      return null;
+    }
+  }
+
   /**
    * 행성 셰이더는 처음 컴파일할 때 2초 남짓 걸린다. 은하를 보는 동안 고리·구름·대기가 다 있는 계 하나를
    * 만들어 병렬 컴파일해 두면, 처음 들어갈 때도 멈칫하지 않는다.
    */
   private async warmUp(galaxy: Galaxy): Promise<void> {
+    if (this.disposed || galaxy !== this.galaxy) return;
+    let stages: Stages;
+    try {
+      stages = await loadStages();
+    } catch {
+      return; // 미리 받기는 조용히 넘어간다. 화면을 옮기려 할 때 onStagesError로 알린다.
+    }
     if (this.disposed || galaxy !== this.galaxy) return;
     let pick = 0;
     for (let i = 0; i < Math.min(galaxy.count, 4000); i++) {
@@ -291,12 +328,12 @@ export class Engine {
       }
     }
     const offstage = new LabelLayer(document.createElement('div'));
-    this.warm = new SystemView(galaxy, makeSystem(galaxy, pick), { ...this.ctx, labels: offstage });
+    this.warm = new stages.SystemView(galaxy, makeSystem(galaxy, pick), { ...this.ctx, labels: offstage });
     await this.precompile(this.warm.scene);
     if (this.disposed || galaxy !== this.galaxy) return;
     this.grid ??= new StarGrid(galaxy);
     // 블랙홀 광선 추적 셰이더도 미리 컴파일한다(큐브맵은 실제로 들어갈 때 그린다).
-    this.warmHole = new BlackHoleView(galaxy, makeSystem(galaxy, CORE_INDEX), this.ctx);
+    this.warmHole = new stages.BlackHoleView(galaxy, makeSystem(galaxy, CORE_INDEX), this.ctx);
     await this.precompile(this.warmHole.scene);
   }
 
@@ -319,6 +356,9 @@ export class Engine {
    * 목적지 쪽으로 돌아보기 → 워프(가속·순항·감속) → 새 항성계 도착.
    */
   async warpTo(index: number): Promise<void> {
+    // 화면 코드를 먼저 받는다. 아래 상태 확인·변경은 받은 뒤 한 번에 해서, 받는 사이 다른 조작과 섞이지 않게 한다.
+    const stages = await this.stages();
+    if (!stages) return;
     const from = this.state.selectedStar;
     if ((!this.systemView && !this.holeView) || from === null || index === from || this.state.busy || this.state.mode !== 'system') return;
     const quick = this.reducedMotion;
@@ -358,7 +398,7 @@ export class Engine {
 
     let warp: WarpView | null = null;
     if (!quick) {
-      warp = new WarpView(this.galaxy, from, index, this.ctx);
+      warp = new stages.WarpView(this.galaxy, from, index, this.ctx);
       await this.precompile(warp.scene);
       this.setView(warp);
       this.labels.root.hidden = true;
@@ -382,7 +422,7 @@ export class Engine {
       const offset = this.galaxySnapshot.position.clone().sub(this.galaxySnapshot.target);
       this.galaxySnapshot = { position: b.clone().add(offset), target: b.clone() };
     }
-    const stage = await this.openStage(target);
+    const stage = await this.openStage(target, stages);
     warp?.dispose();
     this.labels.root.hidden = false;
     this.controls.enabled = true;
@@ -511,6 +551,8 @@ export class Engine {
 
   // ── 항성계 ───────────────────────────────────────────────────────────────
   async enterSystem(index = this.state.selectedStar, instant = false): Promise<void> {
+    const stages = await this.stages();
+    if (!stages) return;
     if (index === null || this.state.busy || this.state.mode !== 'galaxy') return;
     if (this.state.selectedStar !== index) this.selectStar(index, false);
     const quick = instant || this.reducedMotion;
@@ -526,7 +568,7 @@ export class Engine {
     if (!instant) await this.fade(1, quick ? 120 : 260);
 
     const system = this.state.system ?? makeSystem(this.galaxy, index);
-    const stage = await this.openStage(system);
+    const stage = await this.openStage(system, stages);
     const home = stage.home();
     this.setState({ mode: 'system', system, selectedPlanet: null });
     if (quick) {
@@ -542,14 +584,14 @@ export class Engine {
   }
 
   /** 별 종류에 맞는 화면(항성계 또는 블랙홀)을 만들어 미리 컴파일한 뒤 띄운다. */
-  private async openStage(system: StarSystem): Promise<View> {
+  private async openStage(system: StarSystem, stages: Stages): Promise<View> {
     let stage: SystemView | BlackHoleView;
     if (system.star.hole) {
-      this.holeView = new BlackHoleView(this.galaxy, system, this.ctx);
+      this.holeView = new stages.BlackHoleView(this.galaxy, system, this.ctx);
       this.holeView.prepare(this.renderer);
       stage = this.holeView;
     } else {
-      this.systemView = new SystemView(this.galaxy, system, this.ctx);
+      this.systemView = new stages.SystemView(this.galaxy, system, this.ctx);
       stage = this.systemView;
     }
     await this.precompile(stage.scene);
@@ -615,6 +657,8 @@ export class Engine {
 
   // ── 행성 ─────────────────────────────────────────────────────────────────
   async enterPlanet(index = this.state.selectedPlanet, instant = false): Promise<void> {
+    const stages = await this.stages();
+    if (!stages) return;
     const sv = this.systemView;
     if (!sv || index === null || this.state.busy || this.state.mode !== 'system') return;
     if (this.state.selectedPlanet !== index) {
@@ -634,7 +678,7 @@ export class Engine {
     }
     if (!instant) await this.fade(1, quick ? 120 : 240);
 
-    this.planetView = new PlanetView(this.galaxy, sv.system, index, this.ctx);
+    this.planetView = new stages.PlanetView(this.galaxy, sv.system, index, this.ctx);
     await this.precompile(this.planetView.scene);
     this.setView(this.planetView);
     this.labels.root.hidden = true;
@@ -688,6 +732,8 @@ export class Engine {
   // ── 저공비행 ─────────────────────────────────────────────────────────────────
   /** 지금 보던 지점 아래로 내려가 표면 위를 난다. 가스 행성은 땅이 없어 못 한다. */
   async startFlight(): Promise<void> {
+    const stages = await this.stages();
+    if (!stages) return;
     const pv = this.planetView;
     if (!pv || !pv.canFly || this.flightView || this.state.busy || this.state.mode !== 'planet') return;
     const quick = this.reducedMotion;
@@ -698,7 +744,7 @@ export class Engine {
       await this.flyTo(this.camera.position.clone().setLength(1.1), new THREE.Vector3(), 64, 1500, ease.inOutCubic);
     }
     await this.fade(1, quick ? 120 : 300);
-    this.flightView = new FlightView(this.galaxy, pv.system, pv.index, start, suns, this.ctx);
+    this.flightView = new stages.FlightView(this.galaxy, pv.system, pv.index, start, suns, this.ctx);
     await this.precompile(this.flightView.scene);
     this.setView(this.flightView);
     this.controls.enabled = false;
@@ -745,6 +791,8 @@ export class Engine {
 
   /** 행성 화면에서 같은 계의 다른 행성으로 옮겨 간다. */
   async switchPlanet(index: number): Promise<void> {
+    const stages = await this.stages();
+    if (!stages) return;
     const sv = this.systemView;
     if (!sv || !this.planetView || this.flightView || this.state.busy || this.state.mode !== 'planet') return;
     if (index < 0 || index >= sv.system.planets.length || index === this.state.selectedPlanet) return;
@@ -753,7 +801,7 @@ export class Engine {
     await this.fade(1, quick ? 120 : 260);
     this.planetView.dispose();
     sv.setSelected(index);
-    this.planetView = new PlanetView(this.galaxy, sv.system, index, this.ctx);
+    this.planetView = new stages.PlanetView(this.galaxy, sv.system, index, this.ctx);
     this.setView(this.planetView);
     this.setState({ selectedPlanet: index });
     const home = this.planetView.home();

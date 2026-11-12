@@ -268,6 +268,9 @@ function Hud({ engine }: { engine: Engine }) {
     };
   }, [engine, photoOn]);
 
+  // 은하 밖 화면 코드를 받지 못하면(오프라인, 열어 둔 사이 새 배포) 같은 페이지에서는 다시 받을 수 없어 새로고침을 권한다.
+  useEffect(() => engine.onStagesError(() => setToast('화면 자료를 받지 못했습니다. 연결을 확인하고 새로고침해 주세요.')), [engine]);
+
   useEffect(() => {
     if (!toast) return;
     const id = setTimeout(() => setToast(''), 3200);
