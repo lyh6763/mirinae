@@ -125,6 +125,8 @@ function GalaxyPanel({ state, engine }: PanelProps) {
 function StarSearch({ engine, scanned }: { engine: Engine; scanned: number }) {
   const [query, setQuery] = useState('');
   // 탐색이 진행되면 찾을 수 있는 별이 늘어나므로 scanned도 의존성에 넣는다.
+  // engine은 같은 객체로 남은 채 안이 바뀌어서 린터는 scanned가 필요 없다고 본다.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   const hits: SearchHit[] = useMemo(() => engine.search(query), [engine, query, scanned]);
   return (
     <div className="search">
@@ -184,6 +186,8 @@ function SeedForm({ engine, current, busy }: { engine: Engine; current: string; 
 
 // ── 가까운 별: 은하 화면에서는 고르기, 항성계에서는 워프 ──────────────────────
 function NearbyStars({ engine, state, index, action }: { engine: Engine; state: EngineState; index: number; action: 'select' | 'warp' }) {
+  // 은하를 바꾸면 engine은 같은 객체인 채 별 목록이 바뀐다. 같은 번호라도 다른 별이라 은하 이름을 의존성에 넣는다.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   const list = useMemo(() => engine.neighbors(index, 6), [engine, index, state.galaxyName]);
   if (list.length === 0) return null;
   return (

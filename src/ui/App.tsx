@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Soundscape, type SoundScene } from '../audio/Soundscape';
+import { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Soundscape, type Chime, type SoundScene } from '../audio/Soundscape';
 import { Engine, type EngineState, type PhotoSettings } from '../engine/Engine';
 import { ASPECTS, PHOTO_DEFAULT, PhotoPanel } from './PhotoPanel';
 import { PLANET_TYPE_LABEL } from '../gen/system';
@@ -23,6 +23,8 @@ export function App() {
     try {
       created = new Engine(stageRef.current!, route.galaxy, reduced);
     } catch {
+      // WebGL을 쓸 수 있는지는 무대 요소가 붙은 뒤 엔진(외부 시스템)을 만들어 봐야 안다.
+      // oxlint-disable-next-line react/set-state-in-effect
       setFailed(true);
       return;
     }
@@ -209,8 +211,7 @@ function Hud({ engine }: { engine: Engine }) {
   const [photo, setPhoto] = useState<PhotoSettings | null>(null);
   const [aspect, setAspect] = useState('screen');
   const photoButton = useRef<HTMLButtonElement>(null);
-  const photoRef = useRef(photo);
-  photoRef.current = photo;
+  const photoOn = photo !== null;
   useEffect(() => engine.setPhoto(photo), [engine, photo]);
   // 사진 모드를 끝내면 숨겼던 머리말이 다시 그려진 뒤 '사진 모드' 단추로 초점을 돌려준다.
   const focusPhotoButton = () => setTimeout(() => photoButton.current?.focus(), 0);
@@ -220,18 +221,21 @@ function Hud({ engine }: { engine: Engine }) {
   };
 
   // Esc는 어디서든 뒤로. 입력칸 안에서는 입력칸 몫으로 둔다. 사진 모드에서는 사진 모드를 끝낸다.
+  // 키 처리기는 엔진마다 한 번 걸고, 누를 때의 사진 모드 여부는 effect event로 읽는다.
+  const goBack = useEffectEvent(() => {
+    if (photoOn) {
+      exitPhoto();
+      return;
+    }
+    engine.back();
+  });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.target instanceof HTMLTextAreaElement) return;
       if (e.target instanceof HTMLInputElement && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
       // 열린 대화상자가 있으면 Esc는 그 대화상자를 닫는 데만 쓴다.
       if (document.querySelector('dialog[open]')) return;
-      if (photoRef.current) {
-        setPhoto(null);
-        focusPhotoButton();
-        return;
-      }
-      engine.back();
+      goBack();
     };
     const onCanvasKey = (e: KeyboardEvent) => {
       if (engine.handleKey(e)) e.preventDefault();
@@ -250,7 +254,7 @@ function Hud({ engine }: { engine: Engine }) {
     if (!panel) return;
     const update = () => {
       // 사진 모드는 화면 전체로 구도를 잡는다.
-      if (photoRef.current) return engine.setInsets(0, 0);
+      if (photoOn) return engine.setInsets(0, 0);
       const wide = window.innerWidth >= 900;
       engine.setInsets(wide ? panel.offsetWidth + 24 : 0, wide ? 0 : panel.offsetHeight + 12);
     };
@@ -262,7 +266,7 @@ function Hud({ engine }: { engine: Engine }) {
       observer.disconnect();
       window.removeEventListener('resize', update);
     };
-  }, [engine, photo !== null]);
+  }, [engine, photoOn]);
 
   useEffect(() => {
     if (!toast) return;
@@ -289,15 +293,28 @@ function Hud({ engine }: { engine: Engine }) {
       // 저장이 막혀도 이번 방문 동안은 그대로 쓴다.
     }
   }, [sound, volume]);
-  useEffect(() => {
+  // 엔진 상태는 워프 진행률처럼 자주 바뀐다. 소리는 아래 의존성(장면·고른 별·워프 목적지)이 바뀔 때만 내고,
+  // 그때의 나머지 상태는 effect event로 읽는다.
+  const warping = state.warp !== null;
+  const warpTo = state.warp?.to;
+  const applyScene = useEffectEvent(() => {
     sound.setScene(sceneOf(state));
-  }, [sound, state.mode, state.system, state.selectedPlanet, state.warp !== null]);
-  useEffect(() => {
+  });
+  const pingStar = useEffectEvent(() => {
     if (state.mode === 'galaxy' && state.system) sound.ping(state.system.star.temperatureK);
-  }, [sound, state.selectedStar]);
-  useEffect(() => {
+  });
+  const startWarpSound = useEffectEvent(() => {
     if (state.warp && state.warp.progress === 0) sound.warp(state.warp.durationMs);
-  }, [sound, state.warp?.to]);
+  });
+  useEffect(() => {
+    applyScene();
+  }, [state.mode, state.system, state.selectedPlanet, warping]);
+  useEffect(() => {
+    pingStar();
+  }, [state.selectedStar]);
+  useEffect(() => {
+    startWarpSound();
+  }, [warpTo]);
   const toggleSound = async () => {
     if (sound.on) {
       sound.disable();
@@ -316,6 +333,13 @@ function Hud({ engine }: { engine: Engine }) {
   const log = useSyncExternalStore(logStore.subscribe, logStore.getSnapshot);
   const [logOpen, setLogOpen] = useState(false);
   const recorded = useRef({ system: '', planet: '' });
+  // 새로 적혔는지는 일지(외부 저장소)에 써 봐야 알 수 있어, 알림은 기록하는 effect 안에서 띄운다.
+  // 그래서 이 effect에서는 set-state-in-effect를 끈다(announce 안의 setToast).
+  const announce = useEffectEvent((text: string, kind: Chime) => {
+    setToast(text);
+    sound.chime(kind);
+  });
+  /* oxlint-disable react/set-state-in-effect */
   useEffect(() => {
     if (state.mode === 'galaxy') {
       recorded.current = { system: '', planet: '' };
@@ -326,10 +350,7 @@ function Hud({ engine }: { engine: Engine }) {
     const sysKey = entryKey(state.galaxyName, sys.star.index, null);
     if (recorded.current.system !== sysKey) {
       recorded.current = { system: sysKey, planet: '' };
-      if (logStore.visit(systemVisit(state.galaxyName, sys))) {
-        setToast(`새 항성계 기록 · ${sys.star.name}`);
-        sound.chime('new');
-      }
+      if (logStore.visit(systemVisit(state.galaxyName, sys))) announce(`새 항성계 기록 · ${sys.star.name}`, 'new');
     }
     if (state.mode === 'planet' && state.selectedPlanet !== null) {
       const planetKey = entryKey(state.galaxyName, sys.star.index, state.selectedPlanet);
@@ -337,14 +358,16 @@ function Hud({ engine }: { engine: Engine }) {
         recorded.current.planet = planetKey;
         const p = sys.planets[state.selectedPlanet];
         if (logStore.visit(planetVisit(state.galaxyName, sys, state.selectedPlanet))) {
-          setToast(p.life === 3 ? `문명 접촉 · ${p.name}` : p.life > 0 ? `생명 발견 · ${p.name}` : `새 발견 · ${p.name}`);
-          sound.chime(p.life === 3 ? 'civ' : p.life > 0 ? 'life' : 'new');
+          if (p.life === 3) announce(`문명 접촉 · ${p.name}`, 'civ');
+          else if (p.life > 0) announce(`생명 발견 · ${p.name}`, 'life');
+          else announce(`새 발견 · ${p.name}`, 'new');
         }
       }
     } else if (state.mode === 'system') {
       recorded.current.planet = '';
     }
   }, [state.mode, state.system, state.selectedPlanet, state.busy, state.galaxyName]);
+  /* oxlint-enable react/set-state-in-effect */
 
   // 워프를 마치면 횟수와 거리를 더한다.
   const lastWarp = useRef<EngineState['warp']>(null);
