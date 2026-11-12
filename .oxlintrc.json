@@ -1,0 +1,42 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // MIRINAE는 TypeScript 7(네이티브 판)을 써서 typescript-eslint(TypeScript 6.0까지 지원)를 붙일 수 없다.
+  // 그래서 TypeScript 패키지 없이 스스로 파싱하는 Oxlint를 쓰고, 규칙은 다른 저장소의 ESLint 구성
+  // (@eslint/js·typescript-eslint·react-hooks·jsx-a11y recommended)에 가깝게 맞췄다.
+  // unicorn은 다른 저장소 구성에 없어 뺐다. oxc는 Oxlint 고유의 결함 검사(correctness)만 켠다.
+  "plugins": ["eslint", "typescript", "oxc", "react", "jsx-a11y"],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "browser": true,
+    "es2024": true
+  },
+  "ignorePatterns": ["dist", "dist-*"],
+  "rules": {
+    // react-hooks recommended
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+    // typescript-eslint recommended 가운데 Oxlint가 correctness 밖에 둔 것
+    "typescript/ban-ts-comment": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-namespace": "error",
+    "typescript/no-require-imports": "error",
+    "typescript/no-unsafe-function-type": "error",
+    "typescript/prefer-namespace-keyword": "error",
+    // 타입을 맞추려고 받기만 하는 인자는 이름 앞에 _를 붙여 표시한다.
+    // 나머지 펼치기로 필드를 빼는 구조 분해(const { a, ...rest } = x)는 a를 쓰지 않아도 허용한다.
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "ignoreRestSiblings": true }],
+    // eslint-plugin-jsx-a11y recommended에 없는 규칙이다. role="status"를 <output>으로 바꾸라는 식이라
+    // 뜻이 다른 요소를 권한다(output은 계산 결과용). 지금의 role 세 곳은 11/11 axe 검수에서 위반 0이었다.
+    "jsx-a11y/prefer-tag-over-role": "off"
+  },
+  "overrides": [
+    {
+      // 설정 파일은 Node에서 돈다.
+      "files": ["*.config.{ts,js}"],
+      "env": { "node": true }
+    }
+  ]
+}
